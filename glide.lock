@@ -1,6 +1,21 @@
-hash: 547b5cf7620a271ea71474d045ad6c1a35c426b489cebaa687a1f43d6f4c4c81
-updated: 2017-10-12T20:28:47.982142187+09:00
+hash: 10299a6361e92fb894fd73344774b09a25443c8ad3f8a341d826dc6fd367a220
+updated: 2017-10-13T02:20:00.104833824+09:00
 imports:
 - name: github.com/codegangsta/cli
   version: cfb38830724cc34fedffe9a2a29fb54fa9169cd1
+- name: github.com/deckarep/golang-set
+  version: fc8930a5e645572ee00bf66358ed3414f3c13b90
+- name: github.com/dustin/go-humanize
+  version: 79e699ccd02f240a1f1fbbdcee7e64c1c12e41aa
+- name: github.com/mattn/go-runewidth
+  version: 9e777a8366cce605130a531d2cd6363d07ad7317
+- name: github.com/olekukonko/tablewriter
+  version: a7a4c189eb47ed33ce7b35f2880070a0c82a67d4
+- name: gopkg.in/mgo.v2
+  version: 3f83fa5005286a7fe593b055f0d7771a7dce4655
+  subpackages:
+  - bson
+  - internal/json
+  - internal/sasl
+  - internal/scram
 testImports: []

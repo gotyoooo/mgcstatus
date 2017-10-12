@@ -1,4 +1,11 @@
-package: github.com/gotyoooo/go-sample-cmdline-tool
+package: github.com/gotyoooo/mgcstatus
 import:
 - package: github.com/codegangsta/cli
   version: ~1.20.0
+- package: gopkg.in/mgo.v2
+- package: github.com/deckarep/golang-set
+  version: ~1.6.0
+- package: github.com/olekukonko/tablewriter
+- package: github.com/mattn/go-runewidth
+  version: ~0.0.2
+- package: github.com/dustin/go-humanize
