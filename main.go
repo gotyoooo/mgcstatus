@@ -84,6 +84,7 @@ func main() {
 
 		// get config status
 		cfShards := getShards(configDb)
+		cfChunks := getChunks(configDb, database)
 		cfCollections := getCollections(configDb, database)
 		shardsNum := len(cfShards)
 		collectionsNum := len(cfCollections)
@@ -96,7 +97,6 @@ func main() {
 			"chunks",
 			"aveChunkSize(KB)",
 			"idealChunksPerShards",
-			"RemainChunks",
 			"remainChunksSize(KB)",
 			"Jumbos",
 			"balancer",
@@ -108,10 +108,15 @@ func main() {
 			collectionNameWithoutDb := strings.Split(collectionName, ".")[1]
 
 			// get data
-			chunksNum := getFindCount(configDb, bson.M{"ns": collectionName}, "chunks")
+			chunks := cfChunks.Where(func(arg1 Chunk) bool {
+				return arg1.Ns == collectionName
+			})
+			chunksNum := len(chunks)
 			aveObjSize := getCollStats(selectDb, collectionNameWithoutDb).AvgObjSize
 			objsNum := getCount(selectDb, collectionNameWithoutDb)
-			jumboChunksNum := getFindCount(configDb, bson.M{"ns": collectionName, "jumbo": true}, "chunks")
+			jumboChunksNum := len(chunks.Where(func(arg1 Chunk) bool {
+				return arg1.Jumbo == true
+			}))
 			aveChunkSize := objsNum / chunksNum * int(aveObjSize)
 
 			// check ideal per shard
@@ -123,7 +128,9 @@ func main() {
 			// get remain chunks data
 			remainChunksNum := 0
 			for j := 0; j < shardsNum; j++ {
-				shardChunksNum := getFindCount(configDb, bson.M{"ns": collectionName, "shard": cfShards[j].ID}, "chunks")
+				shardChunksNum := len(chunks.Where(func(arg1 Chunk) bool {
+					return arg1.Shard == cfShards[j].ID
+				}))
 				if shardChunksNum > idealChunksPerShardsNum {
 					remainChunksNum += (shardChunksNum - idealChunksPerShardsNum)
 				}
