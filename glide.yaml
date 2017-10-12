@@ -1,0 +1,4 @@
+package: github.com/gotyoooo/go-sample-cmdline-tool
+import:
+- package: github.com/codegangsta/cli
+  version: ~1.20.0
