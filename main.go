@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -80,7 +81,8 @@ func main() {
 		configDb := session.DB("config")
 		selectDb := session.DB(database)
 
-		// shards := getShards(configDb)
+		shards := getShards(configDb)
+		shardsNum := len(shards)
 		// cfChunks := getChunks(configDb, database)
 		cfCollections := getCollections(configDb, database)
 
@@ -108,16 +110,32 @@ func main() {
 		for i := 0; i < len(cfCollections); i++ {
 			collectionName := cfCollections[i].ID
 			collectionNameWithoutDb := strings.Split(collectionName, ".")[1]
-			// aveObjSize := getCollStats(selectDb, collectionNameWithoutDb).AvgObjSize
+
+			// get data
+			chunksNum := getFindCount(configDb, bson.M{"ns": collectionName}, "chunks")
+			aveObjSize := getCollStats(selectDb, collectionNameWithoutDb).AvgObjSize
+			objsNum := getCount(selectDb, collectionNameWithoutDb)
+			jumboChunksNum := getFindCount(configDb, bson.M{"ns": collectionName, "jumbo": true}, "chunks")
+
+			// check ideal per shard
+			idealChunksPerShardsNum := 1
+			if chunksNum > shardsNum {
+				idealChunksPerShardsNum = int(math.Ceil(float64(chunksNum) / float64(shardsNum)))
+			}
+
+			// check balancer status
 			balancer := 1
 			if cfCollections[i].NoBalance {
 				balancer = 0
 			}
+
 			collectionInfos[collectionName] = map[string]int{
-				"chunksNum":      getFindCount(configDb, bson.M{"ns": collectionName}, "chunks"),
-				"jumboChunksNum": getFindCount(configDb, bson.M{"ns": collectionName, "jumbo": true}, "chunks"),
-				"objsNum":        getCount(selectDb, collectionNameWithoutDb),
-				"balancerStatus": balancer,
+				"chunksNum":               chunksNum,
+				"objsNum":                 objsNum,
+				"aveChunkSize":            objsNum / chunksNum * int(aveObjSize),
+				"idealChunksPerShardsNum": idealChunksPerShardsNum,
+				"jumboChunksNum":          jumboChunksNum,
+				"balancerStatus":          balancer,
 			}
 		}
 
@@ -145,7 +163,7 @@ func main() {
 
 		// Table Output
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Name", "Chunks", "Jumbos", "Objs", "balancer"})
+		table.SetHeader([]string{"Name", "Objs", "chunks", "aveChunkSize", "idealChunksPerShards", "Jumbos", "balancer"})
 		// table.SetBorders(tablewriter.Border{Left: true, Top: true, Right: true, Bottom: false})
 		// table.SetBorder(false)
 		// table.AppendBulk(data) // Add Bulk Data
@@ -153,9 +171,11 @@ func main() {
 		for name, info := range collectionInfos {
 			table.Append([]string{
 				name,
-				strconv.Itoa(info["chunksNum"]),
-				strconv.Itoa(info["jumboChunksNum"]),
 				strconv.Itoa(info["objsNum"]),
+				strconv.Itoa(info["chunksNum"]),
+				strconv.Itoa(info["aveChunkSize"]),
+				strconv.Itoa(info["idealChunksPerShardsNum"]),
+				strconv.Itoa(info["jumboChunksNum"]),
 				strconv.Itoa(info["balancerStatus"]),
 			})
 		}
