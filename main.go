@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/codegangsta/cli"
@@ -17,7 +18,7 @@ type Shard struct {
 	Host string `bson:"host"`
 }
 
-// +gen slice:"Select[string],DistinctBy"
+// +gen slice:"Select[string],DistinctBy,Where"
 type Chunk struct {
 	ID      string    `bson:"_id"`
 	Ns      string    `bson:"ns"`
@@ -26,10 +27,15 @@ type Chunk struct {
 	Lastmod time.Time `bson:"lastmod"`
 }
 
-type CollectionInfo struct {
-	chunksNum      int
-	jumboChunksNum int
-	shardChunks    map[string]int
+// +gen slice:"Where"
+type Collection struct {
+	ID        string `bson:"_id"`
+	NoBalance bool   `bson:"noBalance"`
+}
+
+type Collstats struct {
+	Ns         string  `bson:"ns"`
+	AvgObjSize float64 `bson:"avgObjSize"`
 }
 
 // func main() {
@@ -46,7 +52,7 @@ func main() {
 	var port int
 	var database string
 
-	// グローバルオプション設定
+	// Global Option
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:        "host",
@@ -71,11 +77,12 @@ func main() {
 	app.Action = func(c *cli.Context) error {
 		session := getConnection(host, port)
 		defer session.Close()
-		config := session.DB("config")
-		// db := session.DB(database)
+		configDb := session.DB("config")
+		selectDb := session.DB(database)
 
-		// shards := getShards(config)
-		chunks := getChunks(config)
+		// shards := getShards(configDb)
+		// cfChunks := getChunks(configDb, database)
+		cfCollections := getCollections(configDb, database)
 
 		// fmt.Println("Results All: ", shards)
 		// for key, shard := range shards {
@@ -90,32 +97,55 @@ func main() {
 		// shardIds := shards.SelectString(func(arg1 Shard) string {
 		// 	return arg1.ID
 		// })
-		collections := chunks.DistinctBy(func(arg1 Chunk, arg2 Chunk) bool {
-			return arg1.Ns == arg2.Ns
-		}).SelectString(func(arg1 Chunk) string {
-			return arg1.Ns
-		})
+		// collections := cfChunks.DistinctBy(func(arg1 Chunk, arg2 Chunk) bool {
+		// 	return arg1.Ns == arg2.Ns
+		// }).SelectString(func(arg1 Chunk) string {
+		// 	return arg1.Ns
+		// })
 
-		// collectionInfo init
-		collectionInfos := make(map[string]map[string]int, len(collections))
-		for i := 0; i < len(collections); i++ {
-			collectionInfos[collections[i]] = map[string]int{
-				"chunksNum":      0,
-				"jumboChunksNum": 0,
+		// create collection info
+		collectionInfos := make(map[string]map[string]int, len(cfCollections))
+		for i := 0; i < len(cfCollections); i++ {
+			collectionName := cfCollections[i].ID
+			collectionNameWithoutDb := strings.Split(collectionName, ".")[1]
+			// aveObjSize := getCollStats(selectDb, collectionNameWithoutDb).AvgObjSize
+			balancer := 1
+			if cfCollections[i].NoBalance {
+				balancer = 0
+			}
+			collectionInfos[collectionName] = map[string]int{
+				"chunksNum":      getFindCount(configDb, bson.M{"ns": collectionName}, "chunks"),
+				"jumboChunksNum": getFindCount(configDb, bson.M{"ns": collectionName, "jumbo": true}, "chunks"),
+				"objsNum":        getCount(selectDb, collectionNameWithoutDb),
+				"balancerStatus": balancer,
 			}
 		}
 
-		// fmt.Println(collectionInfos["abema.devices"])
+		// fmt.Println(collectionInfos)
+		// count chunks num
+		// for i := 0; i < len(cfChunks); i++ {
+		// 	collectionInfos[cfChunks[i].Ns]["chunksNum"]++
+		// 	if cfChunks[i].Jumbo {
+		// 		collectionInfos[cfChunks[i].Ns]["jumboChunksNum"]++
+		// 	}
+		// }
 
-		for i := 0; i < len(chunks); i++ {
-			collectionInfos[chunks[i].Ns]["chunksNum"]++
-			if chunks[i].Jumbo {
-				collectionInfos[chunks[i].Ns]["jumboChunksNum"]++
-			}
-		}
+		// get collection infomation from database
+		// for i := 0; i < len(cfCollections); i++ {
+		// 	collectionName := strings.Split(cfCollections[i].ID, ".")[1]
+		// 	// docs := getCount(selectDb, collectionName)
+		// 	// fmt.Println(cfCollections[i].ID, docs)
+		// 	collectionInfos[cfCollections[i].ID] = merge(
+		// 		collectionInfos[cfCollections[i].ID],
+		// 		map[string]int{
+		// 			"docsNum": getCount(selectDb, collectionName),
+		// 		},
+		// 	)
+		// }
 
+		// Table Output
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Name", "Chunks", "JumboChunks"})
+		table.SetHeader([]string{"Name", "Chunks", "Jumbos", "Objs", "balancer"})
 		// table.SetBorders(tablewriter.Border{Left: true, Top: true, Right: true, Bottom: false})
 		// table.SetBorder(false)
 		// table.AppendBulk(data) // Add Bulk Data
@@ -125,6 +155,8 @@ func main() {
 				name,
 				strconv.Itoa(info["chunksNum"]),
 				strconv.Itoa(info["jumboChunksNum"]),
+				strconv.Itoa(info["objsNum"]),
+				strconv.Itoa(info["balancerStatus"]),
 			})
 		}
 		table.Render()
@@ -151,11 +183,61 @@ func getShards(db *mgo.Database) ShardSlice {
 	return shards
 }
 
-func getChunks(db *mgo.Database) ChunkSlice {
+func getChunks(db *mgo.Database, database string) ChunkSlice {
 	var chunks ChunkSlice
 	err := db.C("chunks").Find(bson.M{}).All(&chunks)
 	if err != nil {
 		panic(err)
 	}
-	return chunks
+	return chunks.Where(func(arg1 Chunk) bool {
+		return strings.Split(arg1.Ns, ".")[0] == database
+	})
+}
+
+func getCollections(db *mgo.Database, database string) CollectionSlice {
+	var collections CollectionSlice
+	err := db.C("collections").Find(bson.M{}).All(&collections)
+	if err != nil {
+		panic(err)
+	}
+	return collections.Where(func(arg1 Collection) bool {
+		return strings.Split(arg1.ID, ".")[0] == database
+	})
+}
+
+func getFindCount(db *mgo.Database, query interface{}, collection string) int {
+	cnt, err := db.C(collection).Find(query).Count()
+	if err != nil {
+		panic(err)
+	}
+	return cnt
+}
+
+func getCount(db *mgo.Database, collection string) int {
+	cnt, err := db.C(collection).Count()
+	if err != nil {
+		panic(err)
+	}
+	return cnt
+}
+
+func getCollStats(db *mgo.Database, collection string) Collstats {
+	var collStats Collstats
+	err := db.Run(bson.M{"collStats": collection}, &collStats)
+	if err != nil {
+		panic(err)
+	}
+	return collStats
+}
+
+func merge(m1, m2 map[string]int) map[string]int {
+	ans := map[string]int{}
+
+	for k, v := range m1 {
+		ans[k] = v
+	}
+	for k, v := range m2 {
+		ans[k] = v
+	}
+	return (ans)
 }

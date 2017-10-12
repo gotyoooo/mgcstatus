@@ -28,3 +28,13 @@ Outer:
 	}
 	return result
 }
+
+// Where returns a new ChunkSlice whose elements return true for func. See: http://clipperhouse.github.io/gen/#Where
+func (rcv ChunkSlice) Where(fn func(Chunk) bool) (result ChunkSlice) {
+	for _, v := range rcv {
+		if fn(v) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
