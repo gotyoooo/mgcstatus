@@ -14,12 +14,14 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
+// Shard is mongo config.shards document
 // +gen slice:""
 type Shard struct {
 	ID   string `bson:"_id"`
 	Host string `bson:"host"`
 }
 
+// Chunk is mongo config.chunks document
 // +gen slice:"Where"
 type Chunk struct {
 	ID    string `bson:"_id"`
@@ -28,12 +30,14 @@ type Chunk struct {
 	Jumbo bool   `bson:"jumbo"`
 }
 
+// Collection is mongo config.collections document
 // +gen slice:"Where"
 type Collection struct {
 	ID        string `bson:"_id"`
 	NoBalance bool   `bson:"noBalance"`
 }
 
+// Collstats is mongo collstat output
 type Collstats struct {
 	Ns         string  `bson:"ns"`
 	Count      int     `bson:"count"`
