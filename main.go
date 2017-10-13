@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -83,6 +84,11 @@ func main() {
 		cfCollections := getCollections(configDb, database)
 		shardsNum := len(cfShards)
 		collectionsNum := len(cfCollections)
+
+		// collections sort by name
+		sort.Slice(cfCollections, func(i int, j int) bool {
+			return cfCollections[i].ID < cfCollections[j].ID
+		})
 
 		// Table setting
 		table := tablewriter.NewWriter(os.Stdout)
