@@ -6,11 +6,3 @@ package main
 
 // ShardSlice is a slice of type Shard. Use it where you would use []Shard.
 type ShardSlice []Shard
-
-// SelectString projects a slice of string from ShardSlice, typically called a map in other frameworks. See: http://clipperhouse.github.io/gen/#Select
-func (rcv ShardSlice) SelectString(fn func(Shard) string) (result []string) {
-	for _, v := range rcv {
-		result = append(result, fn(v))
-	}
-	return
-}

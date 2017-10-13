@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/codegangsta/cli"
 	"github.com/olekukonko/tablewriter"
@@ -13,19 +12,18 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-// +gen slice:"Select[string]"
+// +gen slice:""
 type Shard struct {
 	ID   string `bson:"_id"`
 	Host string `bson:"host"`
 }
 
-// +gen slice:"Select[string],DistinctBy,Where"
+// +gen slice:"Where"
 type Chunk struct {
-	ID      string    `bson:"_id"`
-	Ns      string    `bson:"ns"`
-	Shard   string    `bson:"shard"`
-	Jumbo   bool      `bson:"jumbo"`
-	Lastmod time.Time `bson:"lastmod"`
+	ID    string `bson:"_id"`
+	Ns    string `bson:"ns"`
+	Shard string `bson:"shard"`
+	Jumbo bool   `bson:"jumbo"`
 }
 
 // +gen slice:"Where"
@@ -36,12 +34,9 @@ type Collection struct {
 
 type Collstats struct {
 	Ns         string  `bson:"ns"`
+	Count      int     `bson:"count"`
 	AvgObjSize float64 `bson:"avgObjSize"`
 }
-
-// func main() {
-//
-// }
 
 func main() {
 	app := cli.NewApp()
@@ -97,6 +92,7 @@ func main() {
 			"chunks",
 			"aveChunkSize(KB)",
 			"idealChunksPerShards",
+			"remainChunks",
 			"remainChunksSize(KB)",
 			"Jumbos",
 			"balancer",
@@ -112,8 +108,9 @@ func main() {
 				return arg1.Ns == collectionName
 			})
 			chunksNum := len(chunks)
-			aveObjSize := getCollStats(selectDb, collectionNameWithoutDb).AvgObjSize
-			objsNum := getCount(selectDb, collectionNameWithoutDb)
+			colstats := getCollStats(selectDb, collectionNameWithoutDb)
+			aveObjSize := colstats.AvgObjSize
+			objsNum := colstats.Count
 			jumboChunksNum := len(chunks.Where(func(arg1 Chunk) bool {
 				return arg1.Jumbo == true
 			}))
@@ -205,22 +202,6 @@ func getCollections(db *mgo.Database, database string) CollectionSlice {
 	})
 }
 
-func getFindCount(db *mgo.Database, query interface{}, collection string) int {
-	cnt, err := db.C(collection).Find(query).Count()
-	if err != nil {
-		panic(err)
-	}
-	return cnt
-}
-
-func getCount(db *mgo.Database, collection string) int {
-	cnt, err := db.C(collection).Count()
-	if err != nil {
-		panic(err)
-	}
-	return cnt
-}
-
 func getCollStats(db *mgo.Database, collection string) Collstats {
 	var collStats Collstats
 	err := db.Run(bson.M{"collStats": collection}, &collStats)
@@ -228,16 +209,4 @@ func getCollStats(db *mgo.Database, collection string) Collstats {
 		panic(err)
 	}
 	return collStats
-}
-
-func merge(m1, m2 map[string]int) map[string]int {
-	ans := map[string]int{}
-
-	for k, v := range m1 {
-		ans[k] = v
-	}
-	for k, v := range m2 {
-		ans[k] = v
-	}
-	return (ans)
 }
