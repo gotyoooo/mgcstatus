@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/codegangsta/cli"
 	"github.com/olekukonko/tablewriter"
@@ -104,62 +105,67 @@ func main() {
 			"balancer",
 		})
 
+		var wg sync.WaitGroup
 		// create collection info
 		for i := 0; i < collectionsNum; i++ {
-			collectionName := cfCollections[i].ID
-			collectionNameWithoutDb := strings.Split(collectionName, ".")[1]
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				collectionName := cfCollections[i].ID
+				collectionNameWithoutDb := strings.Split(collectionName, ".")[1]
 
-			// get data
-			chunks := cfChunks.Where(func(arg1 Chunk) bool {
-				return arg1.Ns == collectionName
-			})
-			chunksNum := len(chunks)
-			colstats := getCollStats(selectDb, collectionNameWithoutDb)
-			aveObjSize := colstats.AvgObjSize
-			objsNum := colstats.Count
-			jumboChunksNum := len(chunks.Where(func(arg1 Chunk) bool {
-				return arg1.Jumbo == true
-			}))
-			aveChunkSize := objsNum / chunksNum * int(aveObjSize)
-
-			// check ideal per shard
-			idealChunksPerShardsNum := 1
-			if chunksNum > shardsNum {
-				idealChunksPerShardsNum = int(math.Ceil(float64(chunksNum) / float64(shardsNum)))
-			}
-
-			// get remain chunks data
-			remainChunksNum := 0
-			for j := 0; j < shardsNum; j++ {
-				shardChunksNum := len(chunks.Where(func(arg1 Chunk) bool {
-					return arg1.Shard == cfShards[j].ID
+				// get data
+				chunks := cfChunks.Where(func(arg1 Chunk) bool {
+					return arg1.Ns == collectionName
+				})
+				chunksNum := len(chunks)
+				colstats := getCollStats(selectDb, collectionNameWithoutDb)
+				aveObjSize := colstats.AvgObjSize
+				objsNum := colstats.Count
+				jumboChunksNum := len(chunks.Where(func(arg1 Chunk) bool {
+					return arg1.Jumbo == true
 				}))
-				if shardChunksNum > idealChunksPerShardsNum {
-					remainChunksNum += (shardChunksNum - idealChunksPerShardsNum)
+				aveChunkSize := objsNum / chunksNum * int(aveObjSize)
+
+				// check ideal per shard
+				idealChunksPerShardsNum := 1
+				if chunksNum > shardsNum {
+					idealChunksPerShardsNum = int(math.Ceil(float64(chunksNum) / float64(shardsNum)))
 				}
-			}
-			remainChunksSize := aveChunkSize * remainChunksNum
 
-			// check balancer status
-			balancer := 1
-			if cfCollections[i].NoBalance {
-				balancer = 0
-			}
+				// get remain chunks data
+				remainChunksNum := 0
+				for j := 0; j < shardsNum; j++ {
+					shardChunksNum := len(chunks.Where(func(arg1 Chunk) bool {
+						return arg1.Shard == cfShards[j].ID
+					}))
+					if shardChunksNum > idealChunksPerShardsNum {
+						remainChunksNum += (shardChunksNum - idealChunksPerShardsNum)
+					}
+				}
+				remainChunksSize := aveChunkSize * remainChunksNum
 
-			// add table row
-			table.Append([]string{
-				collectionName,
-				strconv.Itoa(chunksNum),
-				strconv.Itoa(objsNum),
-				strconv.FormatFloat((float64(aveChunkSize) / float64(1024)), 'f', 2, 64),
-				strconv.Itoa(idealChunksPerShardsNum),
-				strconv.Itoa(remainChunksNum),
-				strconv.FormatFloat((float64(remainChunksSize) / float64(1024)), 'f', 2, 64),
-				strconv.Itoa(jumboChunksNum),
-				strconv.Itoa(balancer),
-			})
+				// check balancer status
+				balancer := 1
+				if cfCollections[i].NoBalance {
+					balancer = 0
+				}
+
+				// add table row
+				table.Append([]string{
+					collectionName,
+					strconv.Itoa(chunksNum),
+					strconv.Itoa(objsNum),
+					strconv.FormatFloat((float64(aveChunkSize) / float64(1024)), 'f', 2, 64),
+					strconv.Itoa(idealChunksPerShardsNum),
+					strconv.Itoa(remainChunksNum),
+					strconv.FormatFloat((float64(remainChunksSize) / float64(1024)), 'f', 2, 64),
+					strconv.Itoa(jumboChunksNum),
+					strconv.Itoa(balancer),
+				})
+			}(i)
 		}
-
+		wg.Wait()
 		// Table Output
 		table.Render()
 
