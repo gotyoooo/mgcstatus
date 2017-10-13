@@ -91,22 +91,9 @@ func main() {
 			return cfCollections[i].ID < cfCollections[j].ID
 		})
 
-		// Table setting
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{
-			"CollectionName",
-			"Objs",
-			"chunks",
-			"aveChunkSize(KB)",
-			"idealChunksPerShards",
-			"remainChunks",
-			"remainChunksSize(KB)",
-			"Jumbos",
-			"balancer",
-		})
-
-		var wg sync.WaitGroup
 		// create collection info
+		var wg sync.WaitGroup
+		collections := make([][]string, collectionsNum)
 		for i := 0; i < collectionsNum; i++ {
 			wg.Add(1)
 			go func(i int) {
@@ -151,8 +138,7 @@ func main() {
 					balancer = 0
 				}
 
-				// add table row
-				table.Append([]string{
+				collections[i] = []string{
 					collectionName,
 					strconv.Itoa(chunksNum),
 					strconv.Itoa(objsNum),
@@ -162,11 +148,25 @@ func main() {
 					strconv.FormatFloat((float64(remainChunksSize) / float64(1024)), 'f', 2, 64),
 					strconv.Itoa(jumboChunksNum),
 					strconv.Itoa(balancer),
-				})
+				}
 			}(i)
 		}
 		wg.Wait()
+
 		// Table Output
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader([]string{
+			"CollectionName",
+			"Objs",
+			"chunks",
+			"aveChunkSize(KB)",
+			"idealChunksPerShards",
+			"remainChunks",
+			"remainChunksSize(KB)",
+			"Jumbos",
+			"balancer",
+		})
+		table.AppendBulk(collections)
 		table.Render()
 
 		return nil
