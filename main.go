@@ -53,6 +53,7 @@ func main() {
 	var host string
 	var port int
 	var database string
+	var markdown bool
 
 	// Global Option
 	app.Flags = []cli.Flag{
@@ -73,6 +74,12 @@ func main() {
 			Value:       "test",
 			Usage:       "database to check status",
 			Destination: &database,
+		},
+		cli.BoolFlag{
+			Name:        "markdown, m",
+			Hidden:      false,
+			Usage:       "enable markdown output",
+			Destination: &markdown,
 		},
 	}
 
@@ -147,6 +154,7 @@ func main() {
 					strconv.Itoa(chunksNum),
 					strconv.Itoa(objsNum),
 					strconv.FormatFloat((float64(aveChunkSize) / float64(1024)), 'f', 2, 64),
+					strconv.FormatFloat(aveObjSize/float64(1024)/float64(1024)*float64(objsNum), 'f', 2, 64),
 					strconv.Itoa(idealChunksPerShardsNum),
 					strconv.Itoa(remainChunksNum),
 					strconv.FormatFloat((float64(remainChunksSize) / float64(1024)), 'f', 2, 64),
@@ -159,11 +167,19 @@ func main() {
 
 		// Table Output
 		table := tablewriter.NewWriter(os.Stdout)
+
+		// Markdown Output
+		if markdown {
+			table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+			table.SetCenterSeparator("|")
+		}
+
 		table.SetHeader([]string{
 			"CollectionName",
 			"Objs",
 			"chunks",
 			"aveChunkSize(KB)",
+			"AllDataSize(MB)",
 			"idealChunksPerShards",
 			"remainChunks",
 			"remainChunksSize(KB)",
